@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Disponibilidad de citas</title>
+<style>
+  :root {
+    --azul: #1a73e8;
+    --verde: #28a745;
+    --rojo: #dc3545;
+    --ocupado: #3f6ad8;
+    --fondo: #f5f5f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--fondo);
+    color: #333;
+  }
+  .header {
+    background: var(--azul);
+    color: #fff;
+    padding: 28px 16px 22px;
+    text-align: center;
+  }
+  .header h1 { margin: 0; font-size: 22px; }
+  .header p { margin: 4px 0 0; color: #dce8ff; font-size: 14px; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 16px; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 10px; font-size: 16px; }
+
+  .cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .cal-nav button {
+    background: var(--azul);
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .cal-nav button:disabled { opacity: 0.4; cursor: default; }
+  .cal-title { font-weight: 700; font-size: 15px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-dia-sem { font-size: 11px; color: #888; text-transform: capitalize; text-align: center; padding: 4px 0; }
+  .cal-dia {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    background: #fafafa;
+  }
+  .cal-dia:hover { background: #e8f0fe; }
+  .cal-dia.seleccionado { background: var(--azul); color: #fff; font-weight: 600; }
+  .cal-dia.hoy { outline: 2px solid var(--azul); outline-offset: -2px; }
+  .cal-dia.pasado { color: #ccc; cursor: default; background: #fafafa; }
+  .cal-dia.vacio { background: transparent; cursor: default; }
+
+  .leyenda { display: flex; justify-content: space-around; gap: 8px; flex-wrap: wrap; }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #555; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+  .slot { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .slot-time { width: 46px; font-size: 13px; font-weight: 600; color: #555; }
+  .slot-bar {
+    flex: 1;
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .libre { background: var(--verde); }
+  .ocupado { background: var(--ocupado); }
+  .restringido { background: var(--rojo); }
+
+  .alerta {
+    background: #fdecea;
+    border: 1px solid #f5c6cb;
+    border-radius: 10px;
+    padding: 12px;
+    color: #a71d2a;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .estado {
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+    padding: 8px;
+  }
+  .btn-recargar {
+    width: 100%;
+    background: #fff;
+    border: 1px solid var(--azul);
+    color: var(--azul);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .foot-note { text-align: center; color: #999; font-size: 11px; margin: 12px 0 24px; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>Disponibilidad de citas</h1>
+    <p>Consulta los horarios libres y toca para coordinar tu cita</p>
+  </div>
+
+  <div class="wrap">
+    <div id="alerta" class="alerta" hidden></div>
+    <div id="estado" class="estado">Cargando horarios…</div>
+
+    <div class="card">
+      <h2>Elige un día</h2>
+      <div class="cal-nav">
+        <button id="prevMes" aria-label="Mes anterior">‹</button>
+        <span class="cal-title" id="tituloMes"></span>
+        <button id="nextMes" aria-label="Mes siguiente">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <div class="card leyenda">
+      <span><span class="dot" style="background:var(--verde)"></span> Libre</span>
+      <span><span class="dot" style="background:var(--ocupado)"></span> Ocupado</span>
+      <span><span class="dot" style="background:var(--rojo)"></span> Restringido</span>
+    </div>
+
+    <div class="card">
+      <h2 id="tituloDia">Selecciona una fecha</h2>
+      <div id="slots"></div>
+    </div>
+
+    <button class="btn-recargar" id="recargar">↻ Actualizar horarios</button>
+    <p class="foot-note">Actualización automática cada 60 segundos</p>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var BASE = 'https://kairos-112e3-default-rtdb.firebaseio.com';
+  var CITAS_URL = BASE + '/citas.json';
+  var REST_URL = BASE + '/restricciones.json';
+  var SLOT_MIN = 30;
+  var HORA_INICIO = 7;
+  var HORA_FIN = 19;
+
+  var citas = [];
+  var restricciones = [];
+  var cargado = false;
+  var fechaSel = null;
+  var hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  var vistaAnio = hoy.getFullYear();
+  var vistaMes = hoy.getMonth();
+
+  var alertaEl = document.getElementById('alerta');
+  var estadoEl = document.getElementById('estado');
+  var tituloMesEl = document.getElementById('tituloMes');
+  var calGridEl = document.getElementById('calGrid');
+  var tituloDiaEl = document.getElementById('tituloDia');
+  var slotsEl = document.getElementById('slots');
+  var prevBtn = document.getElementById('prevMes');
+  var nextBtn = document.getElementById('nextMes');
+  var recargarBtn = document.getElementById('recargar');
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function toKey(h, m) { return pad(h) + ':' + pad(m); }
+
+  function slotMin(slot) {
+    var p = slot.split(':');
+    return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+  }
+
+  function diaSemanaFromFecha(fecha) {
+    var p = fecha.split('-');
+    return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10)).getDay();
+  }
+
+  function fechaStr(y, m, d) {
+    return y + '-' + pad(m) + '-' + pad(d);
+  }
+
+  function esRestringido(slot, fecha) {
+    if (!restricciones.length) return false;
+    var min = slotMin(slot);
+    var minFin = min + SLOT_MIN;
+    var dia = diaSemanaFromFecha(fecha);
+    return restricciones.some(function (r) {
+      return r && Array.isArray(r.dias) && r.dias.indexOf(dia) !== -1 &&
+             r.horaInicio && r.horaFin &&
+             min < slotMin(r.horaFin) && minFin > slotMin(r.horaInicio);
+    });
+  }
+
+  function llamar(url) {
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    });
+  }
+
+  function cargarDatos() {
+    estadoEl.textContent = 'Cargando horarios…';
+    Promise.all([llamar(CITAS_URL), llamar(REST_URL)])
+      .then(function (results) {
+        citas = [];
+        if (results[0]) {
+          Object.keys(results[0]).forEach(function (id) {
+            citas.push({ id: id, data: results[0][id] });
+          });
+        }
+        restricciones = [];
+        if (results[1]) {
+          Object.keys(results[1]).forEach(function (id) {
+            restricciones.push({ id: id, data: results[1][id] });
+          });
+        }
+        cargado = true;
+        alertaEl.hidden = true;
+        estadoEl.textContent = '';
+        pintarMes();
+        pintarDia();
+      })
+      .catch(function (e) {
+        cargado = false;
+        estadoEl.textContent = '';
+        alertaEl.hidden = false;
+        alertaEl.textContent = 'No se pudieron cargar los horarios: ' + (e && e.message ? e.message : e) +
+          '. Revisa que las reglas de la base de datos permitan lectura pública (Reglas "citas" y "restricciones": .read = true).';
+      });
+  }
+
+  function mesVista() {
+    return new Date(vistaAnio, vistaMes, 1);
+  }
+
+  function pintarMes() {
+    var primerDia = mesVista();
+    tituloMesEl.textContent =
+      primerDia.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+
+    var anioSel = primerDia.getFullYear();
+    var mesSel = primerDia.getMonth();
+    var diasEnMes = new Date(anioSel, mesSel + 1, 0).getDate();
+    var offset = primerDia.getDay(); // 0 = domingo
+
+    var html = '';
+    var diasSem = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    diasSem.forEach(function (d) {
+      html += '<div class="cal-dia-sem">' + d + '</div>';
+    });
+
+    for (var i = 0; i < offset; i++) {
+      html += '<div class="cal-dia vacio"></div>';
+    }
+    for (var dia = 1; dia <= diasEnMes; dia++) {
+      var fecha = fechaStr(anioSel, mesSel + 1, dia);
+      var dFecha = new Date(anioSel, mesSel, dia);
+      var esPasado = dFecha < hoy;
+      var esHoy = dFecha.getTime() === hoy.getTime();
+      var esSel = fecha === fechaSel;
+      var cls = 'cal-dia';
+      if (esPasado) cls += ' pasado';
+      if (esHoy) cls += ' hoy';
+      if (esSel) cls += ' seleccionado';
+      html += '<div class="' + cls + '" data-fecha="' + fecha + '">' + dia + '</div>';
+    }
+    calGridEl.innerHTML = html;
+
+    prevBtn.disabled = vistaAnio === hoy.getFullYear() && vistaMes === hoy.getMonth();
+
+    calGridEl.querySelectorAll('.cal-dia[data-fecha]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        if (el.classList.contains('pasado')) return;
+        fechaSel = el.getAttribute('data-fecha');
+        pintarMes();
+        pintarDia();
+      });
+    });
+  }
+
+  function formatDia(fecha) {
+    var p = fecha.split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    var txt = d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return txt.charAt(0).toUpperCase() + txt.slice(1);
+  }
+
+  function pintarDia() {
+    if (!fechaSel) {
+      tituloDiaEl.textContent = 'Selecciona una fecha';
+      slotsEl.innerHTML = '<div class="estado">Toca un día en el calendario para ver la disponibilidad.</div>';
+      return;
+    }
+    tituloDiaEl.textContent = 'Horarios del ' + formatDia(fechaSel);
+
+    var slots = [];
+    for (var h = HORA_INICIO; h < HORA_FIN; h++) {
+      slots.push(toKey(h, 0));
+      slots.push(toKey(h, 30));
+    }
+
+    var html = '';
+    slots.forEach(function (slot) {
+      var ocupado = false;
+      citas.forEach(function (c) {
+        var cd = c.data;
+        if (!cd || cd.fecha !== fechaSel || !cd.hora) return;
+        var start = slotMin(cd.hora);
+        var end = start + (cd.tiempoMinutos || SLOT_MIN);
+        var s = slotMin(slot);
+        var sEnd = s + SLOT_MIN;
+        if (s < end && sEnd > start) ocupado = true;
+      });
+      var tipo = 'libre';
+      var texto = 'Libre';
+      if (esRestringido(slot, fechaSel)) {
+        tipo = 'restringido';
+        texto = 'Restringido';
+      } else if (ocupado) {
+        tipo = 'ocupado';
+        texto = 'Ocupado';
+      }
+      html += '<div class="slot"><span class="slot-time">' + slot + '</span>' +
+              '<span class="slot-bar ' + tipo + '">' + texto + '</span></div>';
+    });
+
+    var anuncio = '';
+    if (!citas.some(function (c) { return c.data && c.data.fecha === fechaSel; })) {
+      anuncio = '<div class="estado">Sin citas registradas: el día está libre.</div>';
+    }
+    slotsEl.innerHTML = anuncio + html;
+  }
+
+  prevBtn.addEventListener('click', function () {
+    vistaMes--;
+    if (vistaMes < 0) { vistaMes = 11; vistaAnio--; }
+    pintarMes();
+    pintarDia();
+  });
+  nextBtn.addEventListener('click', function () {
+    vistaMes++;
+    if (vistaMes > 11) { vistaMes = 0; vistaAnio++; }
+    pintarMes();
+    pintarDia();
+  });
+  recargarBtn.addEventListener('click', cargarDatos);
+
+  cargarDatos();
+  setInterval(cargarDatos, 60000);
+})();
+</script>
+</body>
+</html>
