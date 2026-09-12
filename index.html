@@ -213,10 +213,26 @@
   .cot-advertencia { background: #eef4ff; border: 1px solid #cfe0ff; border-radius: 10px; padding: 12px; font-size: 13px; color: #1a4db3; margin-top: 14px; }
   .cot-aceptada { background: #e6f4ea; border: 1px solid #b7e0c2; color: #1d7a37; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; margin-top: 14px; text-align: center; }
   .alerta.ok { background: #e6f4ea; border-color: #b7e0c2; color: #1d7a37; }
+
+  .header-nav { max-width: 480px; margin: 0 auto; padding: 12px 16px 0; display: flex; justify-content: flex-end; }
+  .btn-cuenta { background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 18px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  .btn-cuenta:hover { background: rgba(255,255,255,0.28); }
+  .cuenta-chip { display: inline-flex; align-items: center; gap: 8px; color: #fff; font-size: 13px; max-width: 100%; }
+  .cuenta-chip button { background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.5); border-radius: 14px; padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .cuenta-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .cuenta-tabs button { flex: 1; background: #f1f1f1; border: none; border-radius: 8px; padding: 10px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  .cuenta-tabs button.activo { background: #1a73e8; color: #fff; }
+  .desglose-btn { width: 100%; background: #fff; border: 1px solid #1a73e8; color: #1a73e8; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 10px; text-align: left; }
+  .lista-item { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+  .lista-item .titulo { font-weight: 700; font-size: 14px; color: #333; }
+  .lista-item .sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .lista-item .dato { font-size: 13px; color: #555; margin-top: 4px; }
+  .pill-estado { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 3px 8px; margin-top: 6px; }
 </style>
 </head>
 <body>
   <div class="header">
+<div class="header-nav"><span id="zonaCuenta"></span></div>
 <h1 id="tituloHeader">Disponibilidad de citas</h1>
       <p id="headerSub">Consulta los horarios libres y toca uno para solicitarlo</p>
   </div>
@@ -251,6 +267,18 @@
 
     <div id="vistaCotizacion" class="card" hidden></div>
     <button class="btn-recargar" id="regresarCitas" hidden>← Volver a los horarios</button>
+
+    <div id="seccionCuenta" hidden>
+      <div class="card">
+        <h2 id="cuentaBienvenida"></h2>
+        <p id="cuentaDesc" class="estado"></p>
+        <button class="desglose-btn" id="btnVerOrdenes" type="button">📦 Mis órdenes de trabajo</button>
+        <button class="desglose-btn" id="btnVerActivos" type="button">🔧 Mis activos</button>
+        <button class="desglose-btn" id="btnVerCitas" type="button">📅 Mis citas</button>
+        <button class="desglose-btn" id="btnVolverCuenta" type="button">← Volver a los horarios</button>
+      </div>
+      <div id="cajaCuenta"></div>
+    </div>
   </div>
 
   <div id="modalSolicitud" class="modal" hidden>
@@ -301,6 +329,32 @@
     </div>
   </div>
 
+  <div id="modalCuenta" class="modal" hidden>
+    <div class="modal-card">
+      <h3 id="cuentaTitulo">Iniciar sesión</h3>
+      <p class="modal-sub" id="cuentaSub">Accede para ver tus órdenes de trabajo y activos</p>
+
+      <div class="cuenta-tabs">
+        <button id="tabEntrar" type="button">Entrar</button>
+        <button id="tabCrear" type="button">Crear cuenta</button>
+      </div>
+
+      <label for="cNombre">Tu nombre</label>
+      <input id="cNombre" type="text" placeholder="Nombre y apellido" maxlength="80" />
+      <label for="cEmail">Correo electrónico *</label>
+      <input id="cEmail" type="email" placeholder="correo@ejemplo.com" maxlength="100" autocomplete="email" />
+      <label for="cPass">Contraseña *</label>
+      <input id="cPass" type="password" placeholder="Mínimo 6 caracteres" maxlength="100" autocomplete="current-password" />
+
+      <div class="modal-msg" id="cuentaMsg"></div>
+
+      <div class="modal-btns">
+        <button id="cuentaCancelar">Cancelar</button>
+        <button id="cuentaAceptar">Entrar</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 (function () {
   'use strict';
@@ -309,6 +363,11 @@
   var CITAS_URL = BASE + '/citas.json';
   var REST_URL = BASE + '/restricciones.json';
   var SOLICITUDES_URL = BASE + '/solicitudes.json';
+  var ORDENES_URL = BASE + '/ordenes.json';
+  var ORDENES_BASE = BASE + '/ordenes';
+  var ACTIVOS_URL = BASE + '/activos.json';
+  var USUARIOS_URL = BASE + '/usuarios';
+  var AUTH_KEY = 'AIzaSyCnyF97fFEPc7GEDLR8ZAwPveB-GXYoXR4';
   var SLOT_MIN = 30;
   var HORA_INICIO = 7;
   var HORA_FIN = 19;
@@ -627,6 +686,9 @@
     var aceptacion = { nombre: nombre, fecha: aceptacionFecha };
     llamar(BASE + '/cotizaciones/' + encodeURIComponent(cotizacionId) + '/aceptacion.json', 'PUT', aceptacion)
       .then(function () {
+        return crearOrdenDeCotizacion(data, nombre, aceptacionFecha);
+      })
+      .then(function () {
         var aviso = construirCorreoAvisoCotizacion(data, nombre);
         return enviarCorreoSitio(data.userEmail, 'Kairos', aviso.subject, aviso.body);
       })
@@ -641,7 +703,7 @@
         });
         alertaEl.hidden = false;
         alertaEl.className = 'alerta ok';
-        alertaEl.textContent = '¡Gracias, ' + nombre + '! Tu cotización fue aceptada. Te contactaremos para coordinar.';
+        alertaEl.textContent = '¡Gracias, ' + nombre + '! Tu cotización fue aceptada y se generó tu orden de trabajo. Te contactaremos para coordinar.';
         if (data.userEmail) {
           alertaEl.textContent += ' (Se notificó a Kairos por correo.)';
         }
@@ -922,6 +984,296 @@
       });
   }
 
+  function sesion() {
+    try { return JSON.parse(localStorage.getItem('kairosSession') || 'null'); } catch (e) { return null; }
+  }
+
+  function guardarSesion(s) { localStorage.setItem('kairosSession', JSON.stringify(s)); }
+  function cerrarSesionLocal() { localStorage.removeItem('kairosSession'); }
+
+  function mensajeErrorAuth(code) {
+    var mapa = {
+      EMAIL_EXISTS: 'Ese correo ya está registrado. Prueba iniciando sesión.',
+      INVALID_LOGIN_CREDENTIALS: 'Correo o contraseña incorrectos.',
+      WEAK_PASSWORD: 'La contraseña debe tener al menos 6 caracteres.',
+      INVALID_EMAIL: 'Escribe un correo válido.',
+      EMAIL_NOT_FOUND: 'No hay una cuenta con ese correo.',
+      INVALID_PASSWORD: 'Contraseña incorrecta.'
+    };
+    return mapa[code] || 'No se pudo completar la acción. Inténtalo de nuevo.';
+  }
+
+  function llamarAuth(url, cuerpo) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(mensajeErrorAuth(data.error.message));
+        return data;
+      });
+  }
+
+  function iniciarSesionWeb(email, pass) {
+    return llamarAuth('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + AUTH_KEY, {
+      email: email, password: pass, returnSecureToken: true
+    }).then(function (d) {
+      guardarSesion({ uid: d.localId, email: d.email, token: d.idToken });
+      return d;
+    });
+  }
+
+  function crearCuentaWeb(email, pass, nombre) {
+    return llamarAuth('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + AUTH_KEY, {
+      email: email, password: pass, returnSecureToken: true
+    }).then(function (d) {
+      guardarSesion({ uid: d.localId, email: d.email, token: d.idToken });
+      return llamar(USUARIOS_URL + '/' + encodeURIComponent(d.localId) + '.json', 'PUT', {
+        uid: d.localId, email: d.email, nombre: nombre, creado: new Date().toISOString()
+      }).then(function () { return d; });
+    });
+  }
+
+  var cuentaTituloEl = document.getElementById('cuentaTitulo');
+  var cuentaSubEl = document.getElementById('cuentaSub');
+  var tabEntrarEl = document.getElementById('tabEntrar');
+  var tabCrearEl = document.getElementById('tabCrear');
+  var cNombreEl = document.getElementById('cNombre');
+  var cEmailEl = document.getElementById('cEmail');
+  var cPassEl = document.getElementById('cPass');
+  var cuentaMsgEl = document.getElementById('cuentaMsg');
+  var cuentaCancelarEl = document.getElementById('cuentaCancelar');
+  var cuentaAceptarEl = document.getElementById('cuentaAceptar');
+  var modalCuentaEl = document.getElementById('modalCuenta');
+  var zonaCuentaEl = document.getElementById('zonaCuenta');
+  var seccionCuentaEl = document.getElementById('seccionCuenta');
+  var cajaCuentaEl = document.getElementById('cajaCuenta');
+  var cuentaBienvenidaEl = document.getElementById('cuentaBienvenida');
+  var cuentaDescEl = document.getElementById('cuentaDesc');
+  var tabCuenta = 'entrar';
+
+  function setTabCuenta(tab) {
+    tabCuenta = tab;
+    tabEntrarEl.classList.toggle('activo', tab === 'entrar');
+    tabCrearEl.classList.toggle('activo', tab === 'crear');
+    cNombreEl.style.display = tab === 'crear' ? '' : 'none';
+    cuentaAceptarEl.textContent = tab === 'crear' ? 'Crear cuenta' : 'Entrar';
+    cuentaTituloEl.textContent = tab === 'crear' ? 'Crear tu cuenta' : 'Iniciar sesión';
+    cEmailEl.focus();
+  }
+
+  function mostrarMsgCuenta(tipo, texto) {
+    cuentaMsgEl.className = 'modal-msg ' + tipo;
+    cuentaMsgEl.textContent = texto;
+    cuentaMsgEl.style.display = 'block';
+  }
+
+  function abrirModalCuenta() {
+    cuentaMsgEl.className = 'modal-msg';
+    cuentaMsgEl.textContent = '';
+    cuentaMsgEl.style.display = 'none';
+    cNombreEl.value = '';
+    cEmailEl.value = '';
+    cPassEl.value = '';
+    setTabCuenta(cuentaTituloEl.textContent === 'Crear tu cuenta' ? 'crear' : 'entrar');
+    cuentaAceptarEl.disabled = false;
+    modalCuentaEl.hidden = false;
+  }
+
+  function cerrarModalCuenta() { modalCuentaEl.hidden = true; }
+
+  function enviarCuenta() {
+    var email = cEmailEl.value.trim();
+    var pass = cPassEl.value;
+    var nombre = cNombreEl.value.trim();
+    if (!email || !pass) {
+      mostrarMsgCuenta('err', 'El correo y la contraseña son obligatorios.');
+      return;
+    }
+    cuentaAceptarEl.disabled = true;
+    var accion = tabCuenta === 'crear' ? crearCuentaWeb : iniciarSesionWeb;
+    accion(email, pass, nombre)
+      .then(function () {
+        cuentaAceptarEl.disabled = false;
+        cerrarModalCuenta();
+        renderZonaCuenta();
+        alertaEl.hidden = false;
+        alertaEl.className = 'alerta ok';
+        alertaEl.textContent = tabCuenta === 'crear'
+          ? '¡Cuenta creada! Ya puedes ver tus órdenes y activos.'
+          : 'Sesión iniciada. Ya puedes ver tus órdenes y activos.';
+      })
+      .catch(function (e) {
+        cuentaAceptarEl.disabled = false;
+        mostrarMsgCuenta('err', e.message);
+      });
+  }
+
+  function renderZonaCuenta() {
+    var s = sesion();
+    if (!s) {
+      zonaCuentaEl.innerHTML = '<button id="btnEntrar" class="btn-cuenta" type="button">👤 Entrar</button>';
+      var entrar = document.getElementById('btnEntrar');
+      if (entrar) entrar.addEventListener('click', abrirModalCuenta);
+      return;
+    }
+    zonaCuentaEl.innerHTML =
+      '<span class="cuenta-chip">👤 ' + escHtml(s.email) +
+      ' <button id="btnMiCuenta" type="button">Mi cuenta</button>' +
+      ' <button id="btnSalir" type="button">Salir</button></span>';
+    var miCuenta = document.getElementById('btnMiCuenta');
+    if (miCuenta) miCuenta.addEventListener('click', entrarModoCuenta);
+    var salir = document.getElementById('btnSalir');
+    if (salir) salir.addEventListener('click', cerrarSesionWeb);
+  }
+
+  function cerrarSesionWeb() {
+    cerrarSesionLocal();
+    salirModoCuenta();
+    renderZonaCuenta();
+    alertaEl.hidden = false;
+    alertaEl.className = 'alerta';
+    alertaEl.textContent = 'Cerraste sesión correctamente.';
+  }
+
+  function entrarModoCuenta() {
+    if (cotizacionId) return;
+    cardCalendarioEl.hidden = true;
+    cardLeyendaEl.hidden = true;
+    cardSlotsEl.hidden = true;
+    recargarBtn.hidden = true;
+    footNoteEl.hidden = true;
+    seccionCuentaEl.hidden = false;
+    tituloHeaderEl.textContent = 'Mi cuenta';
+    headerSubEl.textContent = 'Órdenes, activos y citas vinculadas a tu correo';
+    var s = sesion();
+    cuentaBienvenidaEl.textContent = 'Hola, ' + s.email;
+    cuentaDescEl.textContent = 'Elige una opción para ver tus registros.';
+    cajaCuentaEl.innerHTML = '<div class="estado">Elige una sección arriba.</div>';
+    llamar(USUARIOS_URL + '/' + encodeURIComponent(s.uid) + '.json')
+      .then(function (u) {
+        if (u && u.nombre) cuentaBienvenidaEl.textContent = 'Hola, ' + u.nombre;
+      })
+      .catch(function () {});
+  }
+
+  function salirModoCuenta() {
+    seccionCuentaEl.hidden = true;
+    cajaCuentaEl.innerHTML = '';
+    if (cotizacionId) return;
+    cardCalendarioEl.hidden = false;
+    cardLeyendaEl.hidden = false;
+    cardSlotsEl.hidden = false;
+    recargarBtn.hidden = false;
+    footNoteEl.hidden = false;
+    tituloHeaderEl.textContent = 'Disponibilidad de citas';
+    headerSubEl.textContent = 'Consulta los horarios libres y toca uno para solicitarlo';
+    cargarDatos();
+  }
+
+  function estadoPill(estado) {
+    var m = {
+      pendiente: ['Pendiente', '#b26a00', '#fff3e0'],
+      en_curso: ['En curso', '#1a73e8', '#e8f0fe'],
+      completada: ['Completada', '#1d7a37', '#e6f4ea']
+    };
+    var d = m[estado] || m.pendiente;
+    return '<span class="pill-estado" style="color:' + d[1] + ';background:' + d[2] + ';">' + d[0] + '</span>';
+  }
+
+  function htmlOrden(o) {
+    return '<div class="lista-item"><div class="titulo">' + escHtml(o.codigo || 'Orden') + ' · ' + escHtml(o.cliente || '—') + '</div>' +
+      '<div class="sub">' + (o.items ? o.items.length : 0) + ' partida(s) · Total ' + moneda(o.total) +
+      (o.activoNombre ? ' · Activo: ' + escHtml(o.activoNombre) : '') + '</div>' +
+      (o.email ? '<div class="dato">📧 ' + escHtml(o.email) + '</div>' : '') +
+      '<div>' + estadoPill(o.estado) + '</div></div>';
+  }
+
+  function htmlActivo(a) {
+    return '<div class="lista-item"><div class="titulo">' + escHtml(a.nombre) + '</div>' +
+      '<div class="sub">' + escHtml([a.tipo, a.marca, a.modelo, a.serie].filter(Boolean).join(' · ') || 'Sin especificaciones') + '</div>' +
+      (a.ubicacion ? '<div class="dato">📍 ' + escHtml(a.ubicacion) + '</div>' : '') + '</div>';
+  }
+
+  function htmlCita(c) {
+    return '<div class="lista-item"><div class="titulo">' + escHtml(c.cliente || 'Cita') + '</div>' +
+      '<div class="sub">' + escHtml(c.fecha) + ' · ' + escHtml(c.hora) +
+      (c.descripcion ? ' · ' + escHtml(c.descripcion) : '') + '</div></div>';
+  }
+
+  function cargarDatosCuenta(tipo) {
+    var s = sesion();
+    if (!s) return;
+    var email = s.email.toLowerCase();
+    cajaCuentaEl.innerHTML = '<div class="estado">Cargando…</div>';
+    var url = tipo === 'ordenes' ? ORDENES_URL : tipo === 'activos' ? ACTIVOS_URL : CITAS_URL;
+    llamar(url)
+      .then(function (data) {
+        var lista = [];
+        if (data) Object.keys(data).forEach(function (id) { lista.push({ id: id, d: data[id] }); });
+        var mios = lista.filter(function (x) {
+          var d = x.d || {};
+          var campos = tipo === 'ordenes' ? [d.email, d.userEmail]
+            : tipo === 'activos' ? [d.clienteEmail, d.userEmail]
+            : [d.email, d.userEmail];
+          return campos.some(function (v) {
+            return v && String(v).toLowerCase() === email;
+          });
+        });
+        if (!mios.length) {
+          cajaCuentaEl.innerHTML = '<div class="alerta">No hay <b>' + (tipo === 'ordenes' ? 'órdenes' : tipo === 'activos' ? 'activos' : 'citas') +
+            '</b> vinculados a este correo todavía.</div>';
+          return;
+        }
+        var html = mios
+          .sort(function (a, b) { return (a.d.creacion || '') < (b.d.creacion || '') ? 1 : -1; })
+          .map(function (x) {
+            return tipo === 'ordenes' ? htmlOrden(x.d) : tipo === 'activos' ? htmlActivo(x.d) : htmlCita(x.d);
+          }).join('');
+        cajaCuentaEl.innerHTML = html;
+      })
+      .catch(function (e) {
+        cajaCuentaEl.innerHTML = '<div class="alerta">Error al cargar: ' + escHtml(e && e.message ? e.message : e) + '</div>';
+      });
+  }
+
+  function crearOrdenDeCotizacion(data, nombre, fechaIso) {
+    var nuevo = {
+      cotizacionId: cotizacionId,
+      codigo: '',
+      clienteId: data.clienteId || '',
+      cliente: data.cliente || '',
+      telefono: data.telefono || '',
+      email: data.email || '',
+      direccion: data.direccion || '',
+      lat: data.lat || null,
+      lng: data.lng || null,
+      items: (data.items || []).map(function (i) {
+        return { descripcion: i.descripcion, cantidad: i.cantidad, precio: i.precio };
+      }),
+      total: data.total || 0,
+      comentario: data.comentario || '',
+      estado: 'pendiente',
+      aceptacion: { nombre: nombre, fecha: fechaIso },
+      activoId: null,
+      activoNombre: '',
+      usuarioId: data.usuarioId || '',
+      userEmail: data.userEmail || '',
+      creacion: new Date().toISOString()
+    };
+    return llamar(ORDENES_URL, 'POST', nuevo)
+      .then(function (resp) {
+        if (resp && resp.name) {
+          var codigo = 'ORD-' + String(resp.name).replace(/-/g, '').slice(0, 8).toUpperCase();
+          return llamar(ORDENES_BASE + '/' + resp.name + '.json', 'PATCH', { codigo: codigo });
+        }
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
   modalEnviarEl.addEventListener('click', enviarSolicitud);
   modalCancelarEl.addEventListener('click', cerrarModal);
   modalCerrarOkEl.addEventListener('click', cerrarModal);
@@ -948,6 +1300,24 @@
       window.location.href = './';
     });
   }
+
+  tabEntrarEl.addEventListener('click', function () { setTabCuenta('entrar'); });
+  tabCrearEl.addEventListener('click', function () { setTabCuenta('crear'); });
+  cuentaCancelarEl.addEventListener('click', cerrarModalCuenta);
+  cuentaAceptarEl.addEventListener('click', enviarCuenta);
+  modalCuentaEl.addEventListener('click', function (e) {
+    if (e.target === modalCuentaEl) cerrarModalCuenta();
+  });
+  var btnVerOrdenesEl = document.getElementById('btnVerOrdenes');
+  var btnVerActivosEl = document.getElementById('btnVerActivos');
+  var btnVerCitasEl = document.getElementById('btnVerCitas');
+  var btnVolverCuentaEl = document.getElementById('btnVolverCuenta');
+  btnVerOrdenesEl.addEventListener('click', function () { cargarDatosCuenta('ordenes'); });
+  btnVerActivosEl.addEventListener('click', function () { cargarDatosCuenta('activos'); });
+  btnVerCitasEl.addEventListener('click', function () { cargarDatosCuenta('citas'); });
+  btnVolverCuentaEl.addEventListener('click', salirModoCuenta);
+
+  renderZonaCuenta();
 
   if (cotizacionId) {
     tituloHeaderEl.textContent = 'Cotización';
