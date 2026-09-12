@@ -518,6 +518,7 @@
         modalCancelarEl.style.display = 'none';
         modalCerrarOkEl.style.display = '';
         mostrarMsg('ok', '¡Solicitud enviada! Te vamos a contactar para confirmar la cita de ' + solicitando.slot + '.');
+        setTimeout(cerrarModal, 2000);
       })
       .catch(function (e) {
         modalEnviarEl.disabled = false;
@@ -528,6 +529,9 @@
   modalEnviarEl.addEventListener('click', enviarSolicitud);
   modalCancelarEl.addEventListener('click', cerrarModal);
   modalCerrarOkEl.addEventListener('click', cerrarModal);
+  modalEl.addEventListener('click', function (e) {
+    if (e.target === modalEl && !modalEnviarEl.disabled) cerrarModal();
+  });
 
   prevBtn.addEventListener('click', function () {
     vistaMes--;
