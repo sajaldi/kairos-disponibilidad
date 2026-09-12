@@ -339,6 +339,28 @@
     });
   }
 
+  function enviarCorreoWeb(cuerpo, orderId) {
+    if (!cuerpo.email) return Promise.resolve(false);
+    return fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: 'service_ny758rb',
+        template_id: 'template_wxrwbei',
+        user_id: 'tanIfJ_dm4fuds-bM',
+        template_params: {
+          to_email: cuerpo.email,
+          to_name: cuerpo.nombre,
+          fecha: cuerpo.fecha,
+          hora: cuerpo.hora,
+          mensaje: cuerpo.comentario || '',
+          order_id: orderId
+        }
+      })
+    }).then(function (res) { return res.ok; })
+      .catch(function () { return false; });
+  }
+
   function cargarDatos() {
     if (clienteParam) {
       headerSubEl.textContent = 'Hola ' + clienteParam + ', elige el horario que más te convenga.';
@@ -518,13 +540,26 @@
       hora: solicitando.slot,
       creado: new Date().toISOString()
     };
+    var orderId = '';
     llamar(SOLICITUDES_URL, 'POST', cuerpo)
-      .then(function () {
+      .then(function (resp) {
+        if (resp && resp.name) {
+          orderId = String(resp.name).replace(/-/g, '').slice(0, 8).toUpperCase();
+        }
+        return enviarCorreoWeb(cuerpo, orderId);
+      })
+      .then(function (correoOk) {
         modalEnviarEl.style.display = 'none';
         modalCancelarEl.style.display = 'none';
         modalCerrarOkEl.style.display = '';
-        mostrarMsg('ok', '¡Solicitud enviada! Te vamos a contactar para confirmar la cita de ' + solicitando.slot + '.');
-        setTimeout(cerrarModal, 2000);
+        var msg;
+        if (cuerpo.email && correoOk) {
+          msg = '¡Solicitud enviada, folio #' + orderId + '! Te enviamos un correo de confirmación a ' + cuerpo.email + '.';
+        } else {
+          msg = '¡Solicitud enviada! Te vamos a contactar para confirmar la cita de ' + solicitando.slot + '.';
+        }
+        mostrarMsg('ok', msg);
+        setTimeout(cerrarModal, 2500);
       })
       .catch(function (e) {
         modalEnviarEl.disabled = false;
