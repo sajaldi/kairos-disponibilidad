@@ -500,7 +500,7 @@
     if (neg) v = v.slice(1);
     var p = v.split('.');
     p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return (neg ? '-$' : '$') + p.join('.');
+    return (neg ? '-L' : 'L') + p.join('.');
   }
 
   function formatFechaCorta(iso) {
