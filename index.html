@@ -197,11 +197,26 @@
   .modal-msg { margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 13px; display: none; }
   .modal-msg.ok { background: #e6f4ea; color: #1d7a37; }
   .modal-msg.err { background: #fdecea; color: #a71d2a; }
+
+  .cot-head { font-size: 18px; font-weight: 700; margin: 0 0 2px; color: #333; }
+  .cot-sub { color: #1a73e8; font-weight: 600; font-size: 14px; margin: 0 0 10px; }
+  .cot-fila { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; }
+  .cot-fila b { color: #666; font-weight: 600; }
+  .cot-sep { border: none; border-top: 1px solid #eee; margin: 10px 0; }
+  .cot-tab { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  .cot-tab th { text-align: left; border-bottom: 2px solid #333; padding: 6px 4px; font-size: 13px; }
+  .cot-tab td { border-bottom: 1px solid #eee; padding: 8px 4px; font-size: 14px; vertical-align: top; }
+  .cot-total { text-align: right; font-size: 17px; font-weight: 700; color: #1a73e8; padding: 10px 4px 0; }
+  .cot-comentario { color: #555; font-size: 14px; margin: 10px 0 0; white-space: pre-wrap; }
+  .cot-btn { width: 100%; background: var(--verde); color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 14px; }
+  .cot-advertencia { background: #eef4ff; border: 1px solid #cfe0ff; border-radius: 10px; padding: 12px; font-size: 13px; color: #1a4db3; margin-top: 14px; }
+  .cot-aceptada { background: #e6f4ea; border: 1px solid #b7e0c2; color: #1d7a37; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; margin-top: 14px; text-align: center; }
+  .alerta.ok { background: #e6f4ea; border-color: #b7e0c2; color: #1d7a37; }
 </style>
 </head>
 <body>
   <div class="header">
-<h1>Disponibilidad de citas</h1>
+<h1 id="tituloHeader">Disponibilidad de citas</h1>
       <p id="headerSub">Consulta los horarios libres y toca uno para solicitarlo</p>
   </div>
 
@@ -209,7 +224,7 @@
     <div id="alerta" class="alerta" hidden></div>
     <div id="estado" class="estado">Cargando horarios…</div>
 
-    <div class="card">
+    <div class="card" id="cardCalendario">
       <h2>Elige un día</h2>
       <div class="cal-nav">
         <button id="prevMes" aria-label="Mes anterior">‹</button>
@@ -219,19 +234,22 @@
       <div class="cal-grid" id="calGrid"></div>
     </div>
 
-    <div class="card leyenda">
+    <div class="card leyenda" id="cardLeyenda">
       <span><span class="dot" style="background:var(--verde)"></span> Libre</span>
       <span><span class="dot" style="background:var(--ocupado)"></span> Ocupado</span>
       <span><span class="dot" style="background:var(--rojo)"></span> Restringido</span>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardSlots">
       <h2 id="tituloDia">Selecciona una fecha</h2>
       <div id="slots"></div>
     </div>
 
     <button class="btn-recargar" id="recargar">↻ Actualizar horarios</button>
-    <p class="foot-note">Actualización automática cada 60 segundos · Toca un horario en verde para solicitarlo</p>
+    <p class="foot-note" id="footNote">Actualización automática cada 60 segundos · Toca un horario en verde para solicitarlo</p>
+
+    <div id="vistaCotizacion" class="card" hidden></div>
+    <button class="btn-recargar" id="regresarCitas" hidden>← Volver a los horarios</button>
   </div>
 
   <div id="modalSolicitud" class="modal" hidden>
@@ -305,17 +323,25 @@
 
   var params = new URLSearchParams(window.location.search);
   var clienteParam = (params.get('cliente') || '').trim();
+  var cotizacionId = (params.get('cotizacion') || '').trim();
 
   var alertaEl = document.getElementById('alerta');
   var estadoEl = document.getElementById('estado');
   var headerSubEl = document.getElementById('headerSub');
+  var tituloHeaderEl = document.getElementById('tituloHeader');
+  var cardCalendarioEl = document.getElementById('cardCalendario');
+  var cardLeyendaEl = document.getElementById('cardLeyenda');
+  var cardSlotsEl = document.getElementById('cardSlots');
+  var footNoteEl = document.getElementById('footNote');
+  var recargarBtn = document.getElementById('recargar');
+  var regresarCitasBtn = document.getElementById('regresarCitas');
+  var vistaCotizacionEl = document.getElementById('vistaCotizacion');
   var tituloMesEl = document.getElementById('tituloMes');
   var calGridEl = document.getElementById('calGrid');
   var tituloDiaEl = document.getElementById('tituloDia');
   var slotsEl = document.getElementById('slots');
   var prevBtn = document.getElementById('prevMes');
   var nextBtn = document.getElementById('nextMes');
-  var recargarBtn = document.getElementById('recargar');
 
   var modalEl = document.getElementById('modalSolicitud');
   var modalSubEl = document.getElementById('modalSub');
@@ -466,6 +492,165 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function moneda(n) {
+    var v = (Number(n) || 0).toFixed(2);
+    var neg = v.indexOf('-') === 0;
+    if (neg) v = v.slice(1);
+    var p = v.split('.');
+    p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (neg ? '-$' : '$') + p.join('.');
+  }
+
+  function formatFechaCorta(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    var meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    return d.getDate() + ' de ' + meses[d.getMonth()] + ' de ' + d.getFullYear();
+  }
+
+  function folioCot(id) {
+    return '#' + String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+  }
+
+  function enviarCorreoSitio(email, nombre, subject, body) {
+    if (!email) return Promise.resolve(false);
+    return fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: 'service_ny758rb',
+        template_id: 'template_wxrwbei',
+        user_id: 'tanIfJ_dm4fuds-bM',
+        template_params: {
+          to_email: email,
+          to_name: nombre,
+          subject: subject,
+          body: body
+        }
+      })
+    }).then(function (res) { return res.ok; })
+      .catch(function () { return false; });
+  }
+
+  function cargarCotizacion() {
+    vistaCotizacionEl.hidden = false;
+    estadoEl.textContent = 'Cargando tu cotización…';
+    llamar(BASE + '/cotizaciones/' + encodeURIComponent(cotizacionId) + '.json')
+      .then(function (data) {
+        if (!data || typeof data !== 'object') throw new Error('No se encontró la cotización.');
+        estadoEl.textContent = '';
+        renderCotizacion(data);
+      })
+      .catch(function (e) {
+        estadoEl.textContent = '';
+        alertaEl.hidden = false;
+        alertaEl.textContent = 'No se pudo cargar tu cotización: ' + (e && e.message ? e.message : e);
+      });
+  }
+
+  function renderCotizacion(data) {
+    var items = data.items || [];
+    var filas = items.map(function (it) {
+      var cant = Number(it.cantidad) || 1;
+      var imp = (Number(it.precio) || 0) * cant;
+      return '<tr><td>' + escHtml(it.descripcion) + '</td>' +
+        '<td align="center">' + cant + '</td>' +
+        '<td align="right" style="white-space:nowrap;">' + moneda(it.precio) + '</td>' +
+        '<td align="right" style="white-space:nowrap;">' + moneda(imp) + '</td></tr>';
+    }).join('');
+
+    var estadoHtml;
+    if (data.aceptacion && data.aceptacion.fecha) {
+      estadoHtml = '<div class="cot-aceptada">✓ Aceptada el ' + formatFechaCorta(data.aceptacion.fecha) +
+        (data.aceptacion.nombre ? ' por ' + escHtml(data.aceptacion.nombre) : '') + '</div>';
+    } else {
+      estadoHtml = '<button class="cot-btn" id="btnAceptar" type="button">Aceptar cotización</button>' +
+        '<p class="cot-advertencia">Al aceptar solo confirmas que estás de acuerdo con el detalle y el total. No hay ningún pago en este sitio; nosotros te contactaremos para coordinar.</p>';
+    }
+
+    vistaCotizacionEl.innerHTML =
+      '<p class="cot-head">Cotización ' + folioCot(cotizacionId) + '</p>' +
+      '<p class="cot-sub">Preparada para ' + escHtml(data.cliente || 'estimado cliente') + '</p>' +
+      '<hr class="cot-sep" />' +
+      '<div class="cot-fila"><span>Fecha de emisión</span><span><b>' + escHtml(formatFechaCorta(data.creacion)) + '</b></span></div>' +
+      '<table class="cot-tab"><tr><th>Concepto</th><th align="center">Cant.</th><th align="right">Precio</th><th align="right">Subtotal</th></tr>' +
+      filas + '</table>' +
+      '<div class="cot-total">Total: ' + moneda(data.total) + '</div>' +
+      (data.comentario ? '<p class="cot-comentario">' + escHtml(data.comentario) + '</p>' : '') +
+      estadoHtml;
+
+    var btnAceptar = document.getElementById('btnAceptar');
+    if (btnAceptar) {
+      btnAceptar.addEventListener('click', function () { aceptarCotizacion(data); });
+    }
+  }
+
+  function construirCorreoAvisoCotizacion(data, nombre) {
+    var inner =
+      '<p>¡El cliente aceptó una cotización!</p>' +
+      '<div style="margin:16px 0; padding:14px; border-radius:8px; background-color:#eef4ff; border:1px solid #cfe0ff;">' +
+      '<div><strong>Cotización:</strong> ' + folioCot(cotizacionId) + '</div>' +
+      '<div style="padding-top:6px;"><strong>Cliente:</strong> ' + escHtml(data.cliente || '—') + '</div>' +
+      (data.email ? '<div style="padding-top:6px;"><strong>Correo:</strong> ' + escHtml(data.email) + '</div>' : '') +
+      (data.telefono ? '<div style="padding-top:6px;"><strong>Teléfono:</strong> ' + escHtml(data.telefono) + '</div>' : '') +
+      '<div style="padding-top:6px;"><strong>Aceptada por:</strong> ' + escHtml(nombre) + '</div>' +
+      '<div style="padding-top:6px;"><strong>Total:</strong> ' + moneda(data.total) + '</div>' +
+      '</div>' +
+      '<p>Coordina los siguientes pasos con el cliente y agenda la cita desde la app de Kairos.</p>';
+    return {
+      subject: 'Cotización ' + folioCot(cotizacionId) + ' aceptada por ' + nombre,
+      body:
+        '<div style="background:#f5f5f5; padding:24px 8px; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:#333;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f5f5;"><tr><td align="center">' +
+        '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; background:#ffffff; border-radius:10px; overflow:hidden;">' +
+        '<tr><td style="background:#1a73e8; padding:18px 24px;">' +
+        '<span style="font-size:20px; font-weight:700; color:#ffffff; letter-spacing:.5px;">Kairos</span>' +
+        '<span style="font-size:13px; color:#d6e4ff;"> · Avisos</span>' +
+        '</td></tr>' +
+        '<tr><td style="padding:24px; font-size:14px; line-height:1.6;">' + inner + '</td></tr>' +
+        '<tr><td style="padding:16px 24px; background:#fafafa; border-top:1px solid #eee; font-size:12px; color:#999;">' +
+        'Enviado desde Kairos' +
+        '</td></tr>' +
+        '</table></td></tr></table>' +
+        '</div>'
+    };
+  }
+
+  function aceptarCotizacion(data) {
+    var nombre = (window.prompt('¿Quién confirma esta cotización?', data.cliente || '') || '').trim();
+    if (!nombre) return;
+    var aceptacionFecha = new Date().toISOString();
+    var aceptacion = { nombre: nombre, fecha: aceptacionFecha };
+    llamar(BASE + '/cotizaciones/' + encodeURIComponent(cotizacionId) + '/aceptacion.json', 'PUT', aceptacion)
+      .then(function () {
+        var aviso = construirCorreoAvisoCotizacion(data, nombre);
+        return enviarCorreoSitio(data.userEmail, 'Kairos', aviso.subject, aviso.body);
+      })
+      .then(function () {
+        renderCotizacion({
+          cliente: data.cliente,
+          creacion: data.creacion,
+          items: data.items,
+          total: data.total,
+          comentario: data.comentario,
+          aceptacion: { nombre: nombre, fecha: aceptacionFecha }
+        });
+        alertaEl.hidden = false;
+        alertaEl.className = 'alerta ok';
+        alertaEl.textContent = '¡Gracias, ' + nombre + '! Tu cotización fue aceptada. Te contactaremos para coordinar.';
+        if (data.userEmail) {
+          alertaEl.textContent += ' (Se notificó a Kairos por correo.)';
+        }
+      })
+      .catch(function (e) {
+        estadoEl.textContent = '';
+        alertaEl.hidden = false;
+        alertaEl.className = 'alerta';
+        alertaEl.textContent = 'No se pudo guardar tu aceptación: ' + (e && e.message ? e.message : e);
+      });
   }
 
   function construirCorreoSolicitudWeb(cuerpo, orderId) {
@@ -757,9 +942,26 @@
     pintarDia();
   });
   recargarBtn.addEventListener('click', cargarDatos);
+  if (regresarCitasBtn) {
+    regresarCitasBtn.addEventListener('click', function () {
+      window.location.href = './';
+    });
+  }
 
-  cargarDatos();
-  setInterval(cargarDatos, 60000);
+  if (cotizacionId) {
+    tituloHeaderEl.textContent = 'Cotización';
+    headerSubEl.textContent = 'Revisa el detalle y confirma tu aceptación';
+    cardCalendarioEl.hidden = true;
+    cardLeyendaEl.hidden = true;
+    cardSlotsEl.hidden = true;
+    recargarBtn.hidden = true;
+    footNoteEl.hidden = true;
+    regresarCitasBtn.hidden = false;
+    cargarCotizacion();
+  } else {
+    cargarDatos();
+    setInterval(cargarDatos, 60000);
+  }
 })();
 </script>
 </body>
