@@ -88,6 +88,8 @@
     text-align: center;
   }
   .libre { background: var(--verde); }
+  .libre.solicitable { cursor: pointer; border: 2px solid #1d7a37; }
+  .libre.solicitable:hover { background: #218838; }
   .ocupado { background: var(--ocupado); }
   .restringido { background: var(--rojo); }
 
@@ -118,12 +120,60 @@
     cursor: pointer;
   }
   .foot-note { text-align: center; color: #999; font-size: 11px; margin: 12px 0 24px; }
+
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+  .modal-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px;
+    width: 100%;
+    max-width: 420px;
+  }
+  .modal-card h3 { margin: 0 0 4px; font-size: 18px; color: #333; }
+  .modal-sub { margin: 0 0 14px; font-size: 14px; color: #1a73e8; font-weight: 600; }
+  .modal-card label { display: block; font-size: 13px; color: #666; margin: 8px 0 4px; }
+  .modal-card input,
+  .modal-card textarea {
+    width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 15px;
+    font-family: inherit;
+  }
+  .modal-card textarea { min-height: 70px; resize: vertical; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 16px; }
+  .modal-btns button {
+    flex: 1;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+  }
+  #modalEnviar { background: var(--verde); color: #fff; }
+  #modalEnviar:disabled { background: #9ad0a8; cursor: default; }
+  #modalCerrarOk { background: var(--azul); color: #fff; display: none; }
+  #modalCancelar { background: #fff; color: #555; border: 1px solid #ccc; }
+  .modal-msg { margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 13px; display: none; }
+  .modal-msg.ok { background: #e6f4ea; color: #1d7a37; }
+  .modal-msg.err { background: #fdecea; color: #a71d2a; }
 </style>
 </head>
 <body>
   <div class="header">
-    <h1>Disponibilidad de citas</h1>
-    <p>Consulta los horarios libres y toca para coordinar tu cita</p>
+<h1>Disponibilidad de citas</h1>
+      <p id="headerSub">Consulta los horarios libres y toca uno para solicitarlo</p>
   </div>
 
   <div class="wrap">
@@ -152,7 +202,31 @@
     </div>
 
     <button class="btn-recargar" id="recargar">↻ Actualizar horarios</button>
-    <p class="foot-note">Actualización automática cada 60 segundos</p>
+    <p class="foot-note">Actualización automática cada 60 segundos · Toca un horario en verde para solicitarlo</p>
+  </div>
+
+  <div id="modalSolicitud" class="modal" hidden>
+    <div class="modal-card">
+      <h3>Solicitar cita</h3>
+      <p class="modal-sub" id="modalSub"></p>
+
+      <label for="fNombre">Tu nombre *</label>
+      <input id="fNombre" type="text" placeholder="Nombre y apellido" maxlength="80" />
+
+      <label for="fTelefono">Teléfono</label>
+      <input id="fTelefono" type="tel" placeholder="Teléfono de contacto" maxlength="30" />
+
+      <label for="fComentario">Descripción del trabajo</label>
+      <textarea id="fComentario" placeholder="Breve descripción de lo que necesitas" maxlength="500"></textarea>
+
+      <div class="modal-msg" id="modalMsg"></div>
+
+      <div class="modal-btns">
+        <button id="modalCancelar">Cancelar</button>
+        <button id="modalEnviar">Enviar solicitud</button>
+        <button id="modalCerrarOk">Cerrar</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -162,6 +236,7 @@
   var BASE = 'https://kairos-112e3-default-rtdb.firebaseio.com';
   var CITAS_URL = BASE + '/citas.json';
   var REST_URL = BASE + '/restricciones.json';
+  var SOLICITUDES_URL = BASE + '/solicitudes.json';
   var SLOT_MIN = 30;
   var HORA_INICIO = 7;
   var HORA_FIN = 19;
@@ -175,8 +250,12 @@
   var vistaAnio = hoy.getFullYear();
   var vistaMes = hoy.getMonth();
 
+  var params = new URLSearchParams(window.location.search);
+  var clienteParam = (params.get('cliente') || '').trim();
+
   var alertaEl = document.getElementById('alerta');
   var estadoEl = document.getElementById('estado');
+  var headerSubEl = document.getElementById('headerSub');
   var tituloMesEl = document.getElementById('tituloMes');
   var calGridEl = document.getElementById('calGrid');
   var tituloDiaEl = document.getElementById('tituloDia');
@@ -184,6 +263,18 @@
   var prevBtn = document.getElementById('prevMes');
   var nextBtn = document.getElementById('nextMes');
   var recargarBtn = document.getElementById('recargar');
+
+  var modalEl = document.getElementById('modalSolicitud');
+  var modalSubEl = document.getElementById('modalSub');
+  var fNombreEl = document.getElementById('fNombre');
+  var fTelefonoEl = document.getElementById('fTelefono');
+  var fComentarioEl = document.getElementById('fComentario');
+  var modalMsgEl = document.getElementById('modalMsg');
+  var modalEnviarEl = document.getElementById('modalEnviar');
+  var modalCancelarEl = document.getElementById('modalCancelar');
+  var modalCerrarOkEl = document.getElementById('modalCerrarOk');
+
+  var solicitando = null;
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -215,14 +306,38 @@
     });
   }
 
-  function llamar(url) {
-    return fetch(url).then(function (res) {
+  function slotOcupado(slot, fecha) {
+    var ocupado = false;
+    citas.forEach(function (c) {
+      var cd = c.data;
+      if (!cd || cd.fecha !== fecha || !cd.hora) return;
+      var start = slotMin(cd.hora);
+      var end = start + (cd.tiempoMinutos || SLOT_MIN);
+      var s = slotMin(slot);
+      var sEnd = s + SLOT_MIN;
+      if (s < end && sEnd > start) ocupado = true;
+    });
+    return ocupado;
+  }
+
+  function llamar(url, metodo, cuerpo) {
+    var opciones = {
+      method: metodo || 'GET'
+    };
+    if (cuerpo) {
+      opciones.headers = { 'Content-Type': 'application/json' };
+      opciones.body = JSON.stringify(cuerpo);
+    }
+    return fetch(url, opciones).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     });
   }
 
   function cargarDatos() {
+    if (clienteParam) {
+      headerSubEl.textContent = 'Hola ' + clienteParam + ', elige el horario que más te convenga.';
+    }
     estadoEl.textContent = 'Cargando horarios…';
     Promise.all([llamar(CITAS_URL), llamar(REST_URL)])
       .then(function (results) {
@@ -249,27 +364,22 @@
         estadoEl.textContent = '';
         alertaEl.hidden = false;
         alertaEl.textContent = 'No se pudieron cargar los horarios: ' + (e && e.message ? e.message : e) +
-          '. Revisa que las reglas de la base de datos permitan lectura pública (Reglas "citas" y "restricciones": .read = true).';
+          '. Revisa que las reglas de la base de datos permitan lectura pública.';
       });
   }
 
-  function mesVista() {
-    return new Date(vistaAnio, vistaMes, 1);
-  }
-
   function pintarMes() {
-    var primerDia = mesVista();
+    var primerDia = new Date(vistaAnio, vistaMes, 1);
     tituloMesEl.textContent =
       primerDia.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
 
     var anioSel = primerDia.getFullYear();
     var mesSel = primerDia.getMonth();
     var diasEnMes = new Date(anioSel, mesSel + 1, 0).getDate();
-    var offset = primerDia.getDay(); // 0 = domingo
+    var offset = primerDia.getDay();
 
     var html = '';
-    var diasSem = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    diasSem.forEach(function (d) {
+    ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].forEach(function (d) {
       html += '<div class="cal-dia-sem">' + d + '</div>';
     });
 
@@ -325,16 +435,7 @@
 
     var html = '';
     slots.forEach(function (slot) {
-      var ocupado = false;
-      citas.forEach(function (c) {
-        var cd = c.data;
-        if (!cd || cd.fecha !== fechaSel || !cd.hora) return;
-        var start = slotMin(cd.hora);
-        var end = start + (cd.tiempoMinutos || SLOT_MIN);
-        var s = slotMin(slot);
-        var sEnd = s + SLOT_MIN;
-        if (s < end && sEnd > start) ocupado = true;
-      });
+      var ocupado = slotOcupado(slot, fechaSel);
       var tipo = 'libre';
       var texto = 'Libre';
       if (esRestringido(slot, fechaSel)) {
@@ -345,7 +446,7 @@
         texto = 'Ocupado';
       }
       html += '<div class="slot"><span class="slot-time">' + slot + '</span>' +
-              '<span class="slot-bar ' + tipo + '">' + texto + '</span></div>';
+              '<span class="slot-bar ' + tipo + (tipo === 'libre' ? ' solicitable' : '') + '" data-slot="' + slot + '">' + texto + '</span></div>';
     });
 
     var anuncio = '';
@@ -353,7 +454,79 @@
       anuncio = '<div class="estado">Sin citas registradas: el día está libre.</div>';
     }
     slotsEl.innerHTML = anuncio + html;
+
+    slotsEl.querySelectorAll('.solicitable').forEach(function (el) {
+      el.addEventListener('click', function () {
+        abrirSolicitud(fechaSel, el.getAttribute('data-slot'));
+      });
+    });
   }
+
+  function abrirSolicitud(fecha, slot) {
+    if (slotOcupado(slot, fecha) || esRestringido(slot, fecha)) return;
+    solicitando = { fecha: fecha, slot: slot };
+    modalSubEl.textContent = formatDia(fecha) + ' · ' + slot;
+    fNombreEl.value = clienteParam || '';
+    fTelefonoEl.value = '';
+    fComentarioEl.value = '';
+    modalMsgEl.className = 'modal-msg';
+    modalMsgEl.textContent = '';
+    modalMsgEl.style.display = 'none';
+    modalEnviarEl.style.display = '';
+    modalCancelarEl.style.display = '';
+    modalCerrarOkEl.style.display = 'none';
+    modalEnviarEl.disabled = false;
+    modalEl.hidden = false;
+    setTimeout(function () { fNombreEl.focus(); }, 100);
+  }
+
+  function mostrarMsg(tipo, texto) {
+    modalMsgEl.className = 'modal-msg ' + tipo;
+    modalMsgEl.textContent = texto;
+    modalMsgEl.style.display = 'block';
+  }
+
+  function cerrarModal() {
+    modalEl.hidden = true;
+    solicitando = null;
+  }
+
+  function enviarSolicitud() {
+    var nombre = fNombreEl.value.trim();
+    if (!solicitando) return;
+    if (!nombre) {
+      mostrarMsg('err', 'Escribe tu nombre para poder contactarte.');
+      return;
+    }
+    if (slotOcupado(solicitando.fecha, solicitando.slot) || esRestringido(solicitando.fecha, solicitando.slot)) {
+      mostrarMsg('err', 'Ese horario ya no está disponible. Elige otro.');
+      return;
+    }
+    modalEnviarEl.disabled = true;
+    var cuerpo = {
+      nombre: nombre,
+      telefono: fTelefonoEl.value.trim(),
+      comentario: fComentarioEl.value.trim(),
+      fecha: solicitando.fecha,
+      hora: solicitando.slot,
+      creado: new Date().toISOString()
+    };
+    llamar(SOLICITUDES_URL, 'POST', cuerpo)
+      .then(function () {
+        modalEnviarEl.style.display = 'none';
+        modalCancelarEl.style.display = 'none';
+        modalCerrarOkEl.style.display = '';
+        mostrarMsg('ok', '¡Solicitud enviada! Te vamos a contactar para confirmar la cita de ' + solicitando.slot + '.');
+      })
+      .catch(function (e) {
+        modalEnviarEl.disabled = false;
+        mostrarMsg('err', 'No se pudo enviar la solicitud: ' + (e && e.message ? e.message : e));
+      });
+  }
+
+  modalEnviarEl.addEventListener('click', enviarSolicitud);
+  modalCancelarEl.addEventListener('click', cerrarModal);
+  modalCerrarOkEl.addEventListener('click', cerrarModal);
 
   prevBtn.addEventListener('click', function () {
     vistaMes--;
