@@ -459,8 +459,48 @@
     });
   }
 
+  function escHtml(t) {
+    return String(t == null ? '' : t)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function construirCorreoSolicitudWeb(cuerpo, orderId) {
+    var inner =
+      '<p>Hola ' + escHtml(cuerpo.nombre) + ',</p>' +
+      '<p>Recibimos tu solicitud de cita. A continuación el detalle:</p>' +
+      '<div style="margin:16px 0; padding:14px; border-radius:8px; background-color:#eef4ff; border:1px solid #cfe0ff;">' +
+      '<div style="padding-bottom:6px;"><strong>Folio:</strong> #' + escHtml(orderId) + '</div>' +
+      '<div style="padding-bottom:6px;"><strong>Fecha:</strong> ' + escHtml(cuerpo.fecha || 'Por definir') + '</div>' +
+      '<div style="padding-bottom:6px;"><strong>Hora:</strong> ' + escHtml(cuerpo.hora || 'Por definir') + '</div>' +
+      '<div style="padding-bottom:6px;"><strong>Tiempo estimado:</strong> ' + escHtml(cuerpo.tiempo || 'A definir') + '</div>' +
+      (cuerpo.direccion ? '<div style="padding-bottom:6px;"><strong>Dirección:</strong> ' + escHtml(cuerpo.direccion) + '</div>' : '') +
+      (cuerpo.comentario ? '<div><strong>Comentario:</strong> ' + escHtml(cuerpo.comentario) + '</div>' : '') +
+      '</div>' +
+      '<p>Te confirmaremos la cita por este medio. Si necesitas cambios, responde a este correo.</p>';
+    var body =
+      '<div style="font-family:system-ui,sans-serif,Arial; font-size:14px; color:#333; padding:14px 8px; background-color:#f5f5f5;">' +
+      '<div style="max-width:600px; margin:auto; background-color:#fff;">' +
+      '<div style="border-top:6px solid #1a73e8; padding:16px;">' +
+      '<strong style="font-size:16px; margin-right:4px;">Kairos</strong>' +
+      '<span style="font-size:16px; border-left:1px solid #333; padding-left:8px;"><strong>Solicitud de cita</strong></span>' +
+      '</div>' +
+      '<div style="padding:0 16px 16px;">' + inner + '</div>' +
+      '</div>' +
+      '<div style="max-width:600px; margin:auto;"><p style="color:#999; font-size:12px;">Enviado desde Kairos. Si tienes dudas, responde a este correo.</p></div>' +
+      '</div>';
+    return {
+      subject: 'Solicitud de cita · Folio #' + orderId,
+      body: body
+    };
+  }
+
   function enviarCorreoWeb(cuerpo, orderId) {
     if (!cuerpo.email) return Promise.resolve(false);
+    var correo = construirCorreoSolicitudWeb(cuerpo, orderId);
     return fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -471,11 +511,8 @@
         template_params: {
           to_email: cuerpo.email,
           to_name: cuerpo.nombre,
-          fecha: cuerpo.fecha,
-          hora: cuerpo.hora,
-          tiempo: cuerpo.tiempo || 'A definir',
-          mensaje: cuerpo.comentario || '',
-          order_id: orderId
+          subject: correo.subject,
+          body: correo.body
         }
       })
     }).then(function (res) { return res.ok; })
