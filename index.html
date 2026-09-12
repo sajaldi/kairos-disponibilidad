@@ -217,6 +217,9 @@
       <label for="fTelefono">Teléfono</label>
       <input id="fTelefono" type="tel" placeholder="Teléfono de contacto" maxlength="30" />
 
+      <label for="fEmail">Correo electrónico</label>
+      <input id="fEmail" type="email" placeholder="correo@ejemplo.com" maxlength="80" autocomplete="email" />
+
       <label for="fComentario">Descripción del trabajo</label>
       <textarea id="fComentario" placeholder="Breve descripción de lo que necesitas" maxlength="500"></textarea>
 
@@ -269,6 +272,7 @@
   var modalSubEl = document.getElementById('modalSub');
   var fNombreEl = document.getElementById('fNombre');
   var fTelefonoEl = document.getElementById('fTelefono');
+  var fEmailEl = document.getElementById('fEmail');
   var fComentarioEl = document.getElementById('fComentario');
   var modalMsgEl = document.getElementById('modalMsg');
   var modalEnviarEl = document.getElementById('modalEnviar');
@@ -469,6 +473,7 @@
     modalSubEl.textContent = formatDia(fecha) + ' · ' + slot;
     fNombreEl.value = clienteParam || '';
     fTelefonoEl.value = '';
+    fEmailEl.value = '';
     fComentarioEl.value = '';
     modalMsgEl.className = 'modal-msg';
     modalMsgEl.textContent = '';
@@ -507,6 +512,7 @@
     var cuerpo = {
       nombre: nombre,
       telefono: fTelefonoEl.value.trim(),
+      email: fEmailEl.value.trim(),
       comentario: fComentarioEl.value.trim(),
       fecha: solicitando.fecha,
       hora: solicitando.slot,
