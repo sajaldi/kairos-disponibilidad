@@ -4,7 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Disponibilidad de citas</title>
-<style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
   :root {
     --azul: #1a73e8;
     --verde: #28a745;
@@ -164,6 +166,30 @@
     cursor: pointer;
     border: none;
   }
+  .mapa {
+    height: 220px;
+    border-radius: 8px;
+    margin-top: 6px;
+    border: 1px solid #ddd;
+    z-index: 0;
+  }
+  .map-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .map-row input { flex: 1; margin-top: 0; }
+  #buscarDir {
+    background: #1a73e8;
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .map-coords { font-size: 12px; color: #666; margin-top: 4px; }
   #modalEnviar { background: var(--verde); color: #fff; }
   #modalEnviar:disabled { background: #9ad0a8; cursor: default; }
   #modalCerrarOk { background: var(--azul); color: #fff; display: none; }
@@ -235,6 +261,14 @@
         <option value="8 horas">8 horas</option>
       </select>
 
+      <label for="fDireccion">Ubicación del trabajo</label>
+      <div class="map-row">
+        <input id="fDireccion" type="text" placeholder="Dirección (ej. Col. Los Robles, calle 4)" maxlength="200" />
+        <button id="buscarDir" type="button">🔎</button>
+      </div>
+      <div id="fMapa" class="mapa"></div>
+      <div class="map-coords" id="mapCoords">Toca el mapa para marcar el punto exacto</div>
+
       <label for="fComentario">Descripción del trabajo</label>
       <textarea id="fComentario" placeholder="Breve descripción de lo que necesitas" maxlength="500"></textarea>
 
@@ -289,6 +323,10 @@
   var fTelefonoEl = document.getElementById('fTelefono');
   var fEmailEl = document.getElementById('fEmail');
   var fTiempoEl = document.getElementById('fTiempo');
+  var fDireccionEl = document.getElementById('fDireccion');
+  var buscarDirEl = document.getElementById('buscarDir');
+  var mapaEl = document.getElementById('fMapa');
+  var mapCoordsEl = document.getElementById('mapCoords');
   var fComentarioEl = document.getElementById('fComentario');
   var modalMsgEl = document.getElementById('modalMsg');
   var modalEnviarEl = document.getElementById('modalEnviar');
@@ -296,6 +334,72 @@
   var modalCerrarOkEl = document.getElementById('modalCerrarOk');
 
   var solicitando = null;
+
+  var mapa = null;
+  var marcador = null;
+  var puntoSel = null;
+
+  function initMapa() {
+    if (mapa) {
+      setTimeout(function () { mapa.invalidateSize(); }, 200);
+      return;
+    }
+    mapa = L.map(mapaEl).setView([14.6, -87.9], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(mapa);
+    mapa.on('click', function (e) {
+      puntoSel = { lat: e.latlng.lat, lng: e.latlng.lng };
+      setMarcador(e.latlng);
+    });
+    setTimeout(function () { mapa.invalidateSize(); }, 250);
+  }
+
+  function setMarcador(ll) {
+    if (!mapa) return;
+    if (marcador) {
+      marcador.setLatLng(ll);
+    } else {
+      marcador = L.marker(ll).addTo(mapa);
+    }
+    mapCoordsEl.textContent = 'Punto seleccionado: ' + ll.lat.toFixed(5) + ', ' + ll.lng.toFixed(5);
+  }
+
+  function limpiarPunto() {
+    puntoSel = null;
+    if (marcador && mapa) {
+      mapa.removeLayer(marcador);
+      marcador = null;
+    }
+    mapCoordsEl.textContent = 'Toca el mapa para marcar el punto exacto';
+  }
+
+  function buscarDireccion() {
+    var q = fDireccionEl.value.trim();
+    if (!q) {
+      alert('Escribe una dirección para buscarla en el mapa');
+      return;
+    }
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q), {
+      headers: { 'Accept': 'application/json' }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (arr) {
+        if (!arr || !arr.length) {
+          alert('No se encontró la dirección. Toca el mapa para marcarla manualmente.');
+          return;
+        }
+        var r = arr[0];
+        var ll = { lat: parseFloat(r.lat), lng: parseFloat(r.lon) };
+        puntoSel = ll;
+        initMapa();
+        setMarcador(ll);
+        mapa.setView([ll.lat, ll.lng], 16);
+      })
+      .catch(function () {
+        alert('No se pudo buscar la dirección. Toca el mapa para marcarla manualmente.');
+      });
+  }
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -514,6 +618,8 @@
     fTelefonoEl.value = '';
     fEmailEl.value = '';
     fTiempoEl.value = '';
+    fDireccionEl.value = '';
+    limpiarPunto();
     fComentarioEl.value = '';
     modalMsgEl.className = 'modal-msg';
     modalMsgEl.textContent = '';
@@ -523,7 +629,8 @@
     modalCerrarOkEl.style.display = 'none';
     modalEnviarEl.disabled = false;
     modalEl.hidden = false;
-    setTimeout(function () { fNombreEl.focus(); }, 100);
+    setTimeout(initMapa, 150);
+    setTimeout(function () { fNombreEl.focus(); }, 250);
   }
 
   function mostrarMsg(tipo, texto) {
@@ -554,6 +661,9 @@
       telefono: fTelefonoEl.value.trim(),
       email: fEmailEl.value.trim(),
       tiempo: fTiempoEl.value,
+      direccion: fDireccionEl.value.trim(),
+      lat: puntoSel ? puntoSel.lat : null,
+      lng: puntoSel ? puntoSel.lng : null,
       comentario: fComentarioEl.value.trim(),
       fecha: solicitando.fecha,
       hora: solicitando.slot,
@@ -589,6 +699,7 @@
   modalEnviarEl.addEventListener('click', enviarSolicitud);
   modalCancelarEl.addEventListener('click', cerrarModal);
   modalCerrarOkEl.addEventListener('click', cerrarModal);
+  buscarDirEl.addEventListener('click', buscarDireccion);
   modalEl.addEventListener('click', function (e) {
     if (e.target === modalEl && !modalEnviarEl.disabled) cerrarModal();
   });
