@@ -753,6 +753,41 @@
     };
   }
 
+  function construirCorreoAvisoKairos(cuerpo, orderId) {
+    var inner =
+      '<p>¡Nueva solicitud de cita!</p>' +
+      '<div style="margin:16px 0; padding:14px; border-radius:8px; background-color:#eef4ff; border:1px solid #cfe0ff;">' +
+      '<div style="padding-bottom:6px;"><strong>Folio:</strong> #' + escHtml(orderId) + '</div>' +
+      '<div style="padding-bottom:6px;"><strong>Cliente:</strong> ' + escHtml(cuerpo.nombre || '—') + '</div>' +
+      (cuerpo.telefono ? '<div style="padding-bottom:6px;"><strong>Teléfono:</strong> ' + escHtml(cuerpo.telefono) + '</div>' : '') +
+      (cuerpo.email ? '<div style="padding-bottom:6px;"><strong>Correo:</strong> ' + escHtml(cuerpo.email) + '</div>' : '') +
+      '<div style="padding-bottom:6px;"><strong>Fecha:</strong> ' + escHtml(cuerpo.fecha || 'Por definir') + '</div>' +
+      '<div style="padding-bottom:6px;"><strong>Hora:</strong> ' + escHtml(cuerpo.hora || 'Por definir') + '</div>' +
+      '<div style="padding-bottom:6px;"><strong>Tiempo estimado:</strong> ' + escHtml(cuerpo.tiempo || 'A definir') + '</div>' +
+      (cuerpo.direccion ? '<div style="padding-bottom:6px;"><strong>Dirección:</strong> ' + escHtml(cuerpo.direccion) + '</div>' : '') +
+      (cuerpo.comentario ? '<div><strong>Comentario:</strong> ' + escHtml(cuerpo.comentario) + '</div>' : '') +
+      '</div>' +
+      '<p>Agenda o confirma esta cita desde la app de Kairos.</p>';
+    var body =
+      '<div style="background:#f5f5f5; padding:24px 8px; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:#333;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f5f5;"><tr><td align="center">' +
+      '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; background:#ffffff; border-radius:10px; overflow:hidden;">' +
+      '<tr><td style="background:#1a73e8; padding:18px 24px;">' +
+      '<span style="font-size:20px; font-weight:700; color:#ffffff; letter-spacing:.5px;">Kairos</span>' +
+      '<span style="font-size:13px; color:#d6e4ff;"> · Avisos</span>' +
+      '</td></tr>' +
+      '<tr><td style="padding:24px; font-size:14px; line-height:1.6;">' + inner + '</td></tr>' +
+      '<tr><td style="padding:16px 24px; background:#fafafa; border-top:1px solid #eee; font-size:12px; color:#999;">' +
+      'Enviado desde Kairos' +
+      '</td></tr>' +
+      '</table></td></tr></table>' +
+      '</div>';
+    return {
+      subject: 'Nueva solicitud de cita · #' + orderId,
+      body: body
+    };
+  }
+
   function enviarCorreoWeb(cuerpo, orderId) {
     if (!cuerpo.email) return Promise.resolve(false);
     var correo = construirCorreoSolicitudWeb(cuerpo, orderId);
@@ -967,7 +1002,10 @@
         if (resp && resp.name) {
           orderId = String(resp.name).replace(/-/g, '').slice(0, 8).toUpperCase();
         }
-        return enviarCorreoWeb(cuerpo, orderId);
+        return enviarCorreoWeb(cuerpo, orderId).then(function () {
+          var aviso = construirCorreoAvisoKairos(cuerpo, orderId);
+          return enviarCorreoSitio('kairos.servicios@outlook.com', 'Kairos', aviso.subject, aviso.body);
+        });
       })
       .then(function (correoOk) {
         modalEnviarEl.style.display = 'none';
