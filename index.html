@@ -1020,7 +1020,7 @@
   }
 
   function iniciarSesionWeb(email, pass) {
-    return llamarAuth('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + AUTH_KEY, {
+    return llamarAuth('https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=' + AUTH_KEY, {
       email: email, password: pass, returnSecureToken: true
     }).then(function (d) {
       guardarSesion({ uid: d.localId, email: d.email, token: d.idToken });
@@ -1029,7 +1029,7 @@
   }
 
   function crearCuentaWeb(email, pass, nombre) {
-    return llamarAuth('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + AUTH_KEY, {
+    return llamarAuth('https://www.googleapis.com/identitytoolkit/v3/relyingparty/signupNewUser?key=' + AUTH_KEY, {
       email: email, password: pass, returnSecureToken: true
     }).then(function (d) {
       guardarSesion({ uid: d.localId, email: d.email, token: d.idToken });
