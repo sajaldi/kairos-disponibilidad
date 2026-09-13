@@ -129,9 +129,8 @@
     inset: 0;
     background: rgba(0,0,0,0.5);
     display: flex;
-    align-items: center;
-    justify-content: center;
     padding: 20px;
+    overflow-y: auto;
     z-index: 50;
   }
   .modal[hidden] { display: none; }
@@ -141,6 +140,7 @@
     padding: 20px;
     width: 100%;
     max-width: 420px;
+    margin: auto;
   }
   .modal-card h3 { margin: 0 0 4px; font-size: 18px; color: #333; }
   .modal-sub { margin: 0 0 14px; font-size: 14px; color: #1a73e8; font-weight: 600; }
@@ -168,11 +168,12 @@
     border: none;
   }
   .mapa {
+    position: relative;
+    z-index: 0;
     height: 220px;
     border-radius: 8px;
     margin-top: 6px;
     border: 1px solid #ddd;
-    z-index: 0;
   }
   .map-row {
     display: flex;
