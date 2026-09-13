@@ -515,7 +515,8 @@
     var minFin = min + SLOT_MIN;
     var dia = diaSemanaFromFecha(fecha);
     return restricciones.some(function (r) {
-      return r && (!r.mes || r.mes === fecha.slice(0, 7)) &&
+      return r && (!r.inicio || (fecha >= r.inicio && fecha <= r.fin)) &&
+             (!r.mes || r.mes === fecha.slice(0, 7)) &&
              Array.isArray(r.dias) && r.dias.indexOf(dia) !== -1 &&
              r.horaInicio && r.horaFin &&
              min < slotMin(r.horaFin) && minFin > slotMin(r.horaInicio);
